@@ -65,18 +65,46 @@ actor UsageService {
     // MARK: - Config
 
     private func readToken() throws -> String {
-        let url = URL(fileURLWithPath: configPath)
-        guard let data = try? Data(contentsOf: url) else {
-            throw UsageError.configNotFound
+        // 1. 优先从环境变量读取
+        if let envKey = ProcessInfo.processInfo.environment["GLM_API_KEY"], !envKey.isEmpty {
+            return envKey
         }
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+
+        // 2. 从配置文件读取 (~/.config/glmusagebar/config.json)
+        let configDir = NSHomeDirectory() + "/.config/glmusagebar"
+        let configFile = configDir + "/config.json"
+        if let key = readKeyFromConfigFile(configFile) {
+            return key
+        }
+
+        // 3. 回退到 OpenClaw 配置 (兼容已有用户)
+        let url = URL(fileURLWithPath: configPath)
+        if let key = readKeyFromOpenClawConfig(url) {
+            return key
+        }
+
+        throw UsageError.tokenNotFound
+    }
+
+    private func readKeyFromConfigFile(_ path: String) -> String? {
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let key = json["apiKey"] as? String, !key.isEmpty {
+            return key
+        }
+        return nil
+    }
+
+    private func readKeyFromOpenClawConfig(_ url: URL) -> String? {
+        guard let data = try? Data(contentsOf: url),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let models = json["models"] as? [String: Any],
               let providers = models["providers"] as? [String: Any],
               let zhipu = providers["zhipu"] as? [String: Any],
-              let apiKey = zhipu["apiKey"] as? String else {
-            throw UsageError.tokenNotFound
+              let key = zhipu["apiKey"] as? String, !key.isEmpty {
+            return key
         }
-        return apiKey
+        return nil
     }
 
     // MARK: - API Calls

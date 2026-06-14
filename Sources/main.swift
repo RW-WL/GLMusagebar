@@ -109,7 +109,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Error
         if let error = lastError {
-            addMenuItem(menu, title: "\u{274C} \(error.localizedDescription)")
+            addMenuItem(menu, title: "❌ \(error.localizedDescription)")
+            if case .tokenNotFound = error {
+                addMenuItem(menu, title: "  💡 提示：点击菜单\"🚗 设置 API Key\"")
+            }
             menu.addItem(NSMenuItem.separator())
         }
 
@@ -126,6 +129,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(NSMenuItem.separator())
 
+        menu.addItem(withTitle: "\u{26ED}\u{FE0F} \u{8BBE}\u{7F6E} API Key", action: #selector(setupApiKey), keyEquivalent: "s")
         menu.addItem(withTitle: "\u{9000}\u{51FA} GLM Usage Monitor", action: #selector(quitClicked), keyEquivalent: "q")
 
         statusItem.menu = menu
@@ -171,6 +175,63 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func refreshClicked() {
         Task { await refresh() }
+    }
+
+    @objc private func setupApiKey() {
+        let alert = NSAlert()
+        alert.messageText = "设置 GLM API Key"
+        alert.informativeText = "请输入你的 ZHIPU (GLM) API Key："
+        alert.addButton(withTitle: "保存")
+        alert.addButton(withTitle: "取消")
+
+        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
+        input.placeholderString = "例如: ec6b1e14e1b14429b72377e9864de6dd.xxxxx"
+        alert.accessoryView = input
+
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn {
+            let key = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !key.isEmpty {
+                saveApiKey(key)
+            }
+        }
+    }
+
+    private func saveApiKey(_ key: String) {
+        let configDir = NSHomeDirectory() + "/.config/glmusagebar"
+        let configFile = configDir + "/config.json"
+
+        do {
+            // 创建目录
+            try FileManager.default.createDirectory(
+                atPath: configDir,
+                withIntermediateDirectories: true
+            )
+
+            // 写入配置
+            let config = ["apiKey": key]
+            let data = try JSONSerialization.data(withJSONObject: config, options: .prettyPrinted)
+            try data.write(to: URL(fileURLWithPath: configFile))
+
+            // 设置文件权限为仅用户可读写
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o600],
+                ofItemAtPath: configFile
+            )
+
+            let alert = NSAlert()
+            alert.messageText = "✅ API Key 已保存"
+            alert.informativeText = "配置已保存到 ~/.config/glmusagebar/config.json\n应用将立即刷新数据。"
+            alert.runModal()
+
+            // 立即刷新
+            Task { await refresh() }
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = "❌ 保存失败"
+            alert.informativeText = error.localizedDescription
+            alert.runModal()
+        }
     }
 
     @objc private func quitClicked() {

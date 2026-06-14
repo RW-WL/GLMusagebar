@@ -68,11 +68,42 @@ To auto-start on login, add **GLMUsageBar** to System Settings → General → L
 
 ### Configuration
 
-The app reads your ZHIPU API key from:
+The app supports **3 ways** to configure your ZHIPU (GLM) API key (checked in order):
+
+#### Method 1: Environment Variable (Recommended for development)
+
+```bash
+export GLM_API_KEY="your-api-key-here"
+```
+
+#### Method 2: Config File (Recommended for general use)
+
+```bash
+mkdir -p ~/.config/glmusagebar
+cat > ~/.config/glmusagebar/config.json << EOF
+{
+  "apiKey": "your-api-key-here"
+}
+EOF
+chmod 600 ~/.config/glmusagebar/config.json
+```
+
+#### Method 3: OpenClaw Config (For OpenClaw users)
+
+If you have OpenClaw installed, the app automatically reads from:
 
 ```
 ~/.openclaw/openclaw.json → models.providers.zhipu.apiKey
 ```
+
+#### Method 4: In-App Setup (Easiest)
+
+1. Click the menu bar icon
+2. Select "🚗 设置 API Key" (Setup API Key)
+3. Enter your API key in the dialog
+4. Click "Save"
+
+The key will be saved to `~/.config/glmusagebar/config.json` with 600 file permissions.
 
 ### Project Structure
 
@@ -134,11 +165,42 @@ cp -R build/GLMUsageBar.app /Applications/
 
 ### 配置
 
-应用从以下路径读取 ZHIPU API Key：
+应用支持 **3 种方式** 配置 ZHIPU (GLM) API Key（按优先级排序）：
+
+#### 方式1：环境变量（推荐开发者使用）
+
+```bash
+export GLM_API_KEY="你的-API-Key"
+```
+
+#### 方式2：配置文件（推荐普通用户）
+
+```bash
+mkdir -p ~/.config/glmusagebar
+cat > ~/.config/glmusagebar/config.json << EOF
+{
+  "apiKey": "你的-API-Key"
+}
+EOF
+chmod 600 ~/.config/glmusagebar/config.json
+```
+
+#### 方式3：OpenClaw 配置（OpenClaw 用户自动读取）
+
+如果已安装 OpenClaw，应用会自动从以下路径读取：
 
 ```
 ~/.openclaw/openclaw.json → models.providers.zhipu.apiKey
 ```
+
+#### 方式4：应用内设置（最简单）
+
+1. 点击菜单栏图标
+2. 选择 "🚗 设置 API Key"
+3. 在弹窗中输入你的 API Key
+4. 点击"保存"
+
+Key 会自动保存到 `~/.config/glmusagebar/config.json`，文件权限设为 600（仅用户可读写）。
 
 ### 项目结构
 
