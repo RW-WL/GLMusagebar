@@ -34,10 +34,12 @@ actor UsageService {
         var cal = Calendar(identifier: .gregorian)
         cal.timeZone = tz
         let now = Date()
+        let since24h = cal.date(byAdding: .hour, value: -24, to: now)!
+        let since7d = cal.date(byAdding: .day, value: -7, to: now)!
 
-        async let model24h = queryModelUsage(token: token, since: cal.date(byAdding: .hour, value: -24, to: now)!, until: now)
+        async let model24h = queryModelUsage(token: token, since: since24h, until: now)
         async let quota = queryQuotaLimit(token: token)
-        async let model7d = queryModelUsage(token: token, since: cal.date(byAdding: .day, value: -7, to: now)!, until: now)
+        async let model7d = queryModelUsage(token: token, since: since7d, until: now)
 
         let (m24, q, m7d) = try await (model24h, quota, model7d)
 
@@ -45,6 +47,8 @@ actor UsageService {
             planLevel: q.level,
             watermark5h: q.wm5h,
             watermark7d: q.wm7d,
+            reset5h: q.reset5h,
+            reset7d: q.reset7d,
             tokens24h: m24.totalTokens,
             calls24h: m24.totalCalls,
             tokens7d: m7d.totalTokens,
@@ -120,6 +124,8 @@ actor UsageService {
 
         var wm5h: Double = 0
         var wm7d: Double = 0
+        var reset5h: Date?
+        var reset7d: Date?
         var mcpUsed = 0
         var mcpCap = 0
         var mcpDetails: [MCPDetail] = []
@@ -130,8 +136,15 @@ actor UsageService {
                 let unit = lim["unit"] as? Int ?? 0
                 let number = lim["number"] as? Int ?? 0
                 let pct = lim["percentage"] as? Double ?? 0
-                if unit == 3 && number == 5 { wm5h = pct }
-                if unit == 6 && number == 1 { wm7d = pct }
+                let resetTime = parseResetTime(lim["nextResetTime"])
+                if unit == 3 && number == 5 {
+                    wm5h = pct
+                    reset5h = resetTime
+                }
+                if unit == 6 && number == 1 {
+                    wm7d = pct
+                    reset7d = resetTime
+                }
             }
             if type == "TIME_LIMIT" {
                 mcpUsed = lim["currentValue"] as? Int ?? 0
@@ -143,7 +156,23 @@ actor UsageService {
             }
         }
 
-        return QuotaResponse(level: level, wm5h: wm5h, wm7d: wm7d, mcpUsed: mcpUsed, mcpCap: mcpCap, mcpDetails: mcpDetails)
+        return QuotaResponse(level: level, wm5h: wm5h, wm7d: wm7d, reset5h: reset5h, reset7d: reset7d, mcpUsed: mcpUsed, mcpCap: mcpCap, mcpDetails: mcpDetails)
+    }
+
+    private func parseResetTime(_ raw: Any?) -> Date? {
+        if let value = raw as? Double {
+            return Date(timeIntervalSince1970: value / 1000)
+        }
+        if let value = raw as? Int {
+            return Date(timeIntervalSince1970: Double(value) / 1000)
+        }
+        if let value = raw as? Int64 {
+            return Date(timeIntervalSince1970: Double(value) / 1000)
+        }
+        if let value = raw as? String, let milliseconds = Double(value) {
+            return Date(timeIntervalSince1970: milliseconds / 1000)
+        }
+        return nil
     }
 
     private func request(_ urlString: String, token: String) async throws -> [String: Any] {
@@ -186,6 +215,8 @@ private struct QuotaResponse {
     let level: String
     let wm5h: Double
     let wm7d: Double
+    let reset5h: Date?
+    let reset7d: Date?
     let mcpUsed: Int
     let mcpCap: Int
     let mcpDetails: [MCPDetail]

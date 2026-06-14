@@ -3,8 +3,13 @@ import Cocoa
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 
+// Prevent macOS automatic termination / App Nap
+ProcessInfo.processInfo.disableAutomaticTermination("GLMUsageBar")
+ProcessInfo.processInfo.disableSuddenTermination()
+let _activity = ProcessInfo.processInfo.beginActivity(options: [.userInitiatedAllowingIdleSystemSleep], reason: "GLM Usage Monitor needs to stay alive for periodic refresh")
+
 class AppDelegate: NSObject, NSApplicationDelegate {
-    private let statusItem = NSStatusBar.system.statusItem(withLength: 200)
+    private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let service = UsageService()
     private var currentData: UsageData = .empty
     private var lastError: UsageError?
@@ -12,6 +17,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var timer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Ensure status item is visible
+        statusItem.length = NSStatusItem.variableLength
+        statusItem.button?.title = " GLM"
+        
         updateStatusBarTitle()
         buildMenu()
         startAutoRefresh()
@@ -24,18 +33,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard let button = statusItem.button else { return }
 
         if lastError != nil {
-            button.title = " GLM \u{26A0}\u{FE0F}"
+            button.image = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: "GLM Error")
+            button.title = ""
             return
         }
 
         let wm5h = Int(currentData.watermark5h)
         let wm7d = Int(currentData.watermark7d)
+        let isRed = currentData.watermark5h > 80 || currentData.watermark7d > 80
 
-        let title = " GLM  5h:\(wm5h)%  7d:\(wm7d)%"
+        // Compact: icon + "5%/7%" only (no "GLM" prefix)
+        button.imagePosition = .imageLeading
+        button.image = NSImage(systemSymbolName: "speedometer", accessibilityDescription: "GLM Usage")
+        button.image?.size = NSSize(width: 14, height: 14)
+
+        let title = " \(wm5h)/\(wm7d)"
         let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedSystemFont(ofSize: 13, weight: .semibold),
-            .foregroundColor: (currentData.watermark5h > 80 || currentData.watermark7d > 80)
-                ? NSColor.systemRed : NSColor.textColor
+            .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .semibold),
+            .foregroundColor: isRed ? NSColor.systemRed : NSColor.textColor
         ]
         button.attributedTitle = NSAttributedString(string: title, attributes: attrs)
     }
@@ -47,12 +62,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.autoenablesItems = false
 
         // Header
-        let header = addBoldItem(menu, title: "\u{1F52C} GLM Usage Monitor", fontSize: 14)
+        _ = addBoldItem(menu, title: "\u{1F52C} GLM Usage Monitor", fontSize: 14)
 
         menu.addItem(NSMenuItem.separator())
 
         // Plan level
-        let planLabel = addBoldItem(menu, title: "Plan \(currentData.planLevel.uppercased())", fontSize: 12)
+        _ = addBoldItem(menu, title: "Plan \(currentData.planLevel.uppercased())", fontSize: 12)
 
         menu.addItem(NSMenuItem.separator())
 
@@ -60,10 +75,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         addSectionHeader(menu, title: "\u{1F4CA} \u{6C34}\u{4F4D}")
 
         let bar5h = coloredBar(currentData.watermark5h)
-        addMenuItem(menu, title: "  5h   \(bar5h)  \(Int(currentData.watermark5h))%")
+        addMenuItem(menu, title: "  5h   \(bar5h)  \(Int(currentData.watermark5h))%   \u{91CD}\u{7F6E}: \(formatResetTime(currentData.reset5h))")
 
         let bar7d = coloredBar(currentData.watermark7d)
-        addMenuItem(menu, title: "  7d   \(bar7d)  \(Int(currentData.watermark7d))%")
+        addMenuItem(menu, title: "  7d   \(bar7d)  \(Int(currentData.watermark7d))%   \u{91CD}\u{7F6E}: \(formatResetTime(currentData.reset7d))")
 
         menu.addItem(NSMenuItem.separator())
 
@@ -111,7 +126,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(NSMenuItem.separator())
 
-        let quitItem = menu.addItem(withTitle: "\u{9000}\u{51FA} GLM Usage Monitor", action: #selector(quitClicked), keyEquivalent: "q")
+        menu.addItem(withTitle: "\u{9000}\u{51FA} GLM Usage Monitor", action: #selector(quitClicked), keyEquivalent: "q")
 
         statusItem.menu = menu
     }
@@ -200,6 +215,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func coloredBar(_ pct: Double, width: Int = 12) -> String {
         let filled = max(0, min(width, Int(round(pct / 100 * Double(width)))))
         return String(repeating: "\u{2588}", count: filled) + String(repeating: "\u{2591}", count: width - filled)
+    }
+
+    private func formatResetTime(_ date: Date?) -> String {
+        guard let date else { return "--" }
+        let formatter = DateFormatter()
+        formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
+        if Calendar.current.isDateInToday(date) {
+            formatter.dateFormat = "HH:mm"
+        } else {
+            formatter.dateFormat = "yyyy-MM-dd HH:mm"
+        }
+        return formatter.string(from: date)
     }
 
     private func formatTokens(_ n: Int) -> String {

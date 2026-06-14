@@ -4,6 +4,8 @@ struct UsageData {
     let planLevel: String
     let watermark5h: Double
     let watermark7d: Double
+    let reset5h: Date?
+    let reset7d: Date?
     let tokens24h: Int
     let calls24h: Int
     let tokens7d: Int
@@ -21,6 +23,7 @@ struct UsageData {
 
     static let empty = UsageData(
         planLevel: "-", watermark5h: 0, watermark7d: 0,
+        reset5h: nil, reset7d: nil,
         tokens24h: 0, calls24h: 0, tokens7d: 0, calls7d: 0,
         models24h: [], models7d: [],
         mcpUsed: 0, mcpCap: 0, mcpDetails: [],
